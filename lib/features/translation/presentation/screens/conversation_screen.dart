@@ -410,6 +410,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:speak_and_translate_update/features/translation/presentation/providers/shared_provider.dart' show settingsProvider;
+import 'package:speak_and_translate_update/features/translation/presentation/widgets/speech_tips_widget.dart';
+import 'package:speak_and_translate_update/features/translation/presentation/widgets/shadowing_practice_widget.dart';
 
 import '../../data/models/chat_message_model.dart';
 import '../../domain/repositories/translation_repository.dart';
@@ -430,6 +432,13 @@ class ConversationScreen extends ConsumerStatefulWidget {
 
 class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   final ScrollController _scrollController = ScrollController();
+  bool _showSpeechTips = true;
+  bool _showShadowingPractice = false;
+  String _lastTranslatedText = '';
+  String _lastOriginalText = '';
+  String _currentTargetLanguage = 'German';
+  bool _isPlayingAudio = false;
+  bool _isRecordingPractice = false;
 
   @override
   void initState() {
@@ -510,9 +519,34 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       ),
       body: Column(
         children: [
+          // Speech Tips Widget
+          if (_showSpeechTips)
+            SpeechTipsWidget(
+              isVisible: _showSpeechTips,
+              onDismiss: () {
+                setState(() {
+                  _showSpeechTips = false;
+                });
+              },
+            ),
+          
           // Show style preferences info bar
           if (settings['appMode'] == 'languageLearning')
             _buildStylePreferencesInfo(settings),
+          
+          // Shadowing Practice Widget (show when there's a translation)
+          if (_showShadowingPractice && _lastTranslatedText.isNotEmpty)
+            ShadowingPracticeWidget(
+              originalText: _lastOriginalText,
+              translatedText: _lastTranslatedText,
+              targetLanguage: _currentTargetLanguage,
+              onPlayOriginal: _playOriginalAudio,
+              onPlayTranslation: _playTranslationAudio,
+              onStartRecording: _startPracticeRecording,
+              onStopRecording: _stopPracticeRecording,
+              isRecording: _isRecordingPractice,
+              isPlaying: _isPlayingAudio,
+            ),
           
           Expanded(
             child: ListView.builder(
@@ -888,9 +922,208 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                   if (error.contains('translation style'))
                     Padding(
                       padding: const EdgeInsets.only(top: 8.0),
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pushNamed(context, '/settings'),
-                        style: ElevatedButton.styleFrom(
+                      child: Row(
+                        children: [
+                          // Settings Button
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () => Navigator.pushNamed(context, '/settings'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white.withOpacity(0.1),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.settings, size: 16),
+                                  SizedBox(width: 8),
+                                  Text('Settings', style: TextStyle(fontSize: 14)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          
+                          const SizedBox(width: 12),
+                          
+                          // Speech Tips Toggle
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                setState(() {
+                                  _showSpeechTips = !_showSpeechTips;
+                                });
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _showSpeechTips 
+                                    ? Colors.blue.withOpacity(0.3)
+                                    : Colors.white.withOpacity(0.1),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    _showSpeechTips ? Icons.lightbulb : Icons.lightbulb_outline,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text('Tips', style: TextStyle(fontSize: 14)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          
+                          const SizedBox(width: 12),
+                          
+                          // Practice Toggle
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: _lastTranslatedText.isNotEmpty ? () {
+                                setState(() {
+                                  _showShadowingPractice = !_showShadowingPractice;
+                                });
+                              } : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _showShadowingPractice 
+                                    ? Colors.green.withOpacity(0.3)
+                                    : Colors.white.withOpacity(0.1),
+                                foregroundColor: _lastTranslatedText.isNotEmpty 
+                                    ? Colors.white 
+                                    : Colors.white54,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    _showShadowingPractice ? Icons.school : Icons.school_outlined,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text('Practice', style: TextStyle(fontSize: 14)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Audio playback methods
+  void _playOriginalAudio() {
+    setState(() {
+      _isPlayingAudio = true;
+    });
+    
+    // Simulate audio playback
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isPlayingAudio = false;
+        });
+      }
+    });
+    
+    // TODO: Implement actual TTS for original text
+    print('🔊 Playing original audio: $_lastOriginalText');
+  }
+
+  void _playTranslationAudio() {
+    setState(() {
+      _isPlayingAudio = true;
+    });
+    
+    // Simulate audio playback
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isPlayingAudio = false;
+        });
+      }
+    });
+    
+    // TODO: Implement actual TTS for translated text
+    print('🔊 Playing translation audio: $_lastTranslatedText');
+  }
+
+  void _startPracticeRecording() {
+    setState(() {
+      _isRecordingPractice = true;
+    });
+    
+    // TODO: Implement actual recording functionality
+    print('🎤 Started practice recording');
+  }
+
+  void _stopPracticeRecording() {
+    setState(() {
+      _isRecordingPractice = false;
+    });
+    
+    // TODO: Implement actual recording stop and analysis
+    print('⏹️ Stopped practice recording');
+    
+    // Show feedback
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('🎯 Great practice! Keep working on your pronunciation.'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Widget _buildOldSettingsButton() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.all(16),
+      child: Card(
+        color: Colors.grey[900],
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              const Text(
+                'No conversation yet',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Start speaking to begin your translation conversation',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.pushNamed(context, '/settings'),
+                style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.orange,
                           foregroundColor: Colors.white,
                         ),
